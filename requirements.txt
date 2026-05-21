@@ -1,0 +1,52 @@
+# Healthcare NLP System — pinned dependencies
+# Target: Python 3.11 or 3.12 (NEVER 3.13+ — ChromaDB breaks)
+
+# --- UI ---
+streamlit>=1.32,<2.0
+streamlit-audiorecorder>=0.0.5
+static-ffmpeg>=2.5
+
+# --- Vector DB ---
+chromadb==1.5.9
+
+# --- Embeddings + Transformers ---
+sentence-transformers>=2.7,<3.0
+transformers>=4.40,<5.0
+torch>=2.2,<3.0
+huggingface_hub>=0.20
+
+# --- NER (scispaCy + spaCy must stay version-compatible) ---
+spacy>=3.7,<3.8
+scispacy>=0.5.4,<0.6
+# The en_ner_bc5cdr_md model is installed separately as a wheel:
+#   pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_ner_bc5cdr_md-0.5.4.tar.gz
+
+# --- Classical ML ---
+scikit-learn>=1.4,<2.0
+pandas>=2.2,<3.0
+numpy>=1.26,<2.0
+
+# --- OpenAI ---
+openai>=1.55
+python-dotenv>=1.0
+
+# --- Evaluation ---
+rouge-score>=0.1.2
+bert-score>=0.3.13
+nltk>=3.8
+scipy>=1.11
+matplotlib>=3.8
+
+# --- Utilities ---
+tqdm>=4.66
+requests>=2.31
+python-dateutil>=2.9 
+
+# --- Testing ---
+pytest>=8.0
+unsloth>=2024.11
+triton-windows>=3.0 ; platform_system == "Windows"
+trl>=0.12
+bitsandbytes>=0.44
+datasets>=2.20
+ollama>=0.4

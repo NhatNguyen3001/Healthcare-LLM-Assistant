@@ -1,0 +1,10 @@
+model,scope,label,tp,fp,fn,precision,recall,f1
+scispacy_bc5cdr_md,exact,CHEMICAL,4661,513,720,0.9009,0.8662,0.8832
+scispacy_bc5cdr_md,exact,DISEASE,3359,844,1065,0.7992,0.7593,0.7787
+scispacy_bc5cdr_md,exact,micro,0,0,0,0.8553,0.818,0.8362
+scispacy_bc5cdr_md,exact,macro,0,0,0,0.85,0.8127,0.831
+en_core_web_sm,exact_clinical_only,CHEMICAL,0,0,5381,0.0,0.0,0.0
+en_core_web_sm,exact_clinical_only,DISEASE,0,0,4424,0.0,0.0,0.0
+en_core_web_sm,exact_clinical_only,micro,0,0,0,0.0,0.0,0.0
+scispacy_bc5cdr_md,span_agnostic,any,8745,632,1060,0.9326,0.8919,0.9118
+en_core_web_sm,span_agnostic,any,1497,7556,8308,0.1654,0.1527,0.1588

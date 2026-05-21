@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Healthcare NLP Assistant — QLoRA Training Pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #fbbf24; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>QLoRA Training Pipeline · Qwen2.5-1.5B → medqa-qwen</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">6 datasets → 9,000 pairs → Unsloth + LoRA → adapter → llama.cpp Q4_K_M GGUF → Ollama</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 870">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Stage 1: Six datasets -->
+        <rect x="100" y="60" width="800" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="500" y="85" fill="white" font-size="12" font-weight="600" text-anchor="middle">Six biomedical Q&amp;A datasets · per-source cap = 1,500 pairs</text>
+        <text x="200" y="110" fill="#94a3b8" font-size="9" text-anchor="middle">• BioASQ (factoid + list)</text>
+        <text x="430" y="110" fill="#94a3b8" font-size="9" text-anchor="middle">• MedQuAD (consumer Q&amp;A)</text>
+        <text x="700" y="110" fill="#94a3b8" font-size="9" text-anchor="middle">• DrugBank · description</text>
+        <text x="200" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">• DrugBank · indication</text>
+        <text x="430" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">• DrugBank · side_effects</text>
+        <text x="700" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">• DrugBank · mechanism_of_action</text>
+
+        <!-- Stage 2: prepare_qlora_dataset.py -->
+        <rect x="200" y="170" width="600" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="194" fill="white" font-size="12" font-weight="600" text-anchor="middle">scripts/prepare_qlora_dataset.py</text>
+        <text x="500" y="212" fill="#94a3b8" font-size="9" text-anchor="middle">--per-source-limit 1500 · 90/5/5 split · seed=42 · OpenAI messages JSONL</text>
+
+        <!-- Stage 3: Splits -->
+        <rect x="120" y="260" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="230" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">train.jsonl</text>
+        <text x="230" y="302" fill="#94a3b8" font-size="9" text-anchor="middle">8,100 pairs</text>
+
+        <rect x="390" y="260" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="500" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">val.jsonl</text>
+        <text x="500" y="302" fill="#94a3b8" font-size="9" text-anchor="middle">450 pairs · eval every 200 steps</text>
+
+        <rect x="660" y="260" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="770" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">test.jsonl</text>
+        <text x="770" y="302" fill="#94a3b8" font-size="9" text-anchor="middle">450 pairs · held out for notebooks 05-07</text>
+
+        <!-- Stage 4: Training -->
+        <rect x="100" y="360" width="800" height="110" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="386" fill="white" font-size="12" font-weight="600" text-anchor="middle">QLoRA Training · Unsloth + Qwen2.5-1.5B-Instruct (4-bit NF4 via bitsandbytes)</text>
+        <text x="250" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">LoRA config</text>
+        <text x="250" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">r=16 · α=32 · dropout=0</text>
+        <text x="250" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">all 7 projection layers</text>
+        <text x="500" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">SFTTrainer (TRL)</text>
+        <text x="500" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">3 epochs · adamw_8bit · lr 2e-4 cosine</text>
+        <text x="500" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">seq 1024 · batch 2 × grad_accum 4 (eff. 8)</text>
+        <text x="750" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">Hardware</text>
+        <text x="750" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">RTX 4060 8GB · bf16</text>
+        <text x="750" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">~5,667 s (~95 min)</text>
+        <text x="500" y="460" fill="#fbbf24" font-size="9" text-anchor="middle">best eval_loss 1.5536 @ epoch ~1.98 · deployed end-of-epoch-3 checkpoint</text>
+
+        <!-- Stage 5: Adapter -->
+        <rect x="300" y="500" width="400" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="500" y="524" fill="white" font-size="12" font-weight="600" text-anchor="middle">QLoRA Adapter (PEFT)</text>
+        <text x="500" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">models/qwen-medqa-adapter/ · adapter_model.safetensors · ~71 MB</text>
+
+        <!-- Stage 6: Export -->
+        <rect x="200" y="590" width="600" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="614" fill="white" font-size="12" font-weight="600" text-anchor="middle">scripts/export_to_ollama_manual.py</text>
+        <text x="500" y="632" fill="#94a3b8" font-size="9" text-anchor="middle">peft.merge_and_unload → llama.cpp convert_hf_to_gguf.py → llama-quantize Q4_K_M</text>
+
+        <!-- Stage 7: GGUF -->
+        <rect x="300" y="680" width="400" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="500" y="704" fill="white" font-size="12" font-weight="600" text-anchor="middle">model.Q4_K_M.gguf + Modelfile</text>
+        <text x="500" y="722" fill="#94a3b8" font-size="9" text-anchor="middle">models/qwen-medqa-gguf/ · ~941 MB · ready for Ollama</text>
+
+        <!-- Stage 8: Ollama -->
+        <rect x="200" y="770" width="600" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="500" y="794" fill="white" font-size="12" font-weight="600" text-anchor="middle">Ollama · medqa-qwen tag</text>
+        <text x="500" y="812" fill="#94a3b8" font-size="9" text-anchor="middle">ollama create medqa-qwen -f Modelfile · served at 127.0.0.1:11434 (loopback)</text>
+
+        <!-- Arrows -->
+        <line x1="500" y1="140" x2="500" y2="168" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Stage 2 → Stage 3 (split into 3) -->
+        <line x1="500" y1="230" x2="230" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="500" y1="230" x2="500" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="500" y1="230" x2="770" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Stage 3 → Stage 4 (3 boxes → training) -->
+        <line x1="230" y1="320" x2="350" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="240" y="346" fill="#a78bfa" font-size="9">train</text>
+        <line x1="500" y1="320" x2="500" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="510" y="346" fill="#a78bfa" font-size="9">eval</text>
+        <line x1="770" y1="320" x2="650" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)" stroke-dasharray="4,4"/>
+        <text x="710" y="346" fill="#a78bfa" font-size="9">held out</text>
+
+        <!-- Stage 4 → Stage 5 -->
+        <line x1="500" y1="470" x2="500" y2="498" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Stage 5 → Stage 6 -->
+        <line x1="500" y1="560" x2="500" y2="588" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Stage 6 → Stage 7 -->
+        <line x1="500" y1="650" x2="500" y2="678" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Stage 7 → Stage 8 -->
+        <line x1="500" y1="740" x2="500" y2="768" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Legend (top-right inside SVG, below the dataset box) -->
+        <text x="855" y="170" fill="white" font-size="10" font-weight="600">Legend</text>
+        <rect x="855" y="182" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="877" y="190" fill="#94a3b8" font-size="8">Data source</text>
+        <rect x="855" y="198" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="877" y="206" fill="#94a3b8" font-size="8">Script / step</text>
+        <rect x="855" y="214" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="877" y="222" fill="#94a3b8" font-size="8">Artifact</text>
+        <line x1="855" y1="236" x2="871" y2="236" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="877" y="239" fill="#94a3b8" font-size="8">Held out</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>Dataset mix</h3></div>
+        <ul>
+          <li>• 9,000 stratified pairs total</li>
+          <li>• ~1,500 per source for balance</li>
+          <li>• 90/5/5 split with seed=42</li>
+          <li>• Chat template applied at train time</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Training notes</h3></div>
+        <ul>
+          <li>• 4-bit NF4 base via bitsandbytes</li>
+          <li>• LoRA targets all 7 projections</li>
+          <li>• ~95 min wall time on RTX 4060</li>
+          <li>• best eval_loss 1.5536 @ epoch 1.98</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot violet"></div><h3>Export &amp; deploy</h3></div>
+        <ul>
+          <li>• Adapter ~71 MB (PEFT safetensors)</li>
+          <li>• GGUF Q4_K_M ~941 MB for Ollama</li>
+          <li>• Manual llama.cpp path (Unsloth Win bug)</li>
+          <li>• Tag: medqa-qwen @ 127.0.0.1:11434</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">QLoRA Training Pipeline · Qwen2.5-1.5B-Instruct → medqa-qwen · COMP8420 2026</p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPNG(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a'); link.download = 'architecture-qlora-training.png'; link.href = canvas.toDataURL('image/png'); link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPDF(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('architecture-qlora-training.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
