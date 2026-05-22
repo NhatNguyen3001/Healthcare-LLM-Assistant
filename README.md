@@ -19,7 +19,7 @@
 
 1. **End-to-end voice pipeline** → PII railguard → grounded clinical recommendation. Speak a symptom into the browser; get a recommendation in under 10 seconds. PII is masked before any LLM call.
 
-2. **Multi-agent retrieval (MASS-RAG)** over six biomedical knowledge bases (~56k cleaned chunks). Per-source filter agents fan out in parallel; a synthesis agent condenses before the final LLM call. Drops in either GPT-5.5 (cloud) or the local QLoRA Qwen via Ollama.
+2. **Multi-agent retrieval (MASS-RAG)** over six biomedical knowledge bases (~55.9k cleaned chunks). Three role-based filter agents (Summarizer · Extractor · Reasoner) fan out in parallel over the retained hits; a synthesis agent reconciles their outputs before the final LLM call. Drops in either GPT-5.5 (cloud) or the local QLoRA Qwen via Ollama.
 
 3. **QLoRA-fine-tuned Qwen2.5-1.5B vs GPT-5.5**, evaluated three ways: ROUGE / BERTScore (PubMedBERT backbone) / LLM-as-judge. Includes a written-up negative finding (template substitution beats factual improvement on surface metrics) because that's the more honest story.
 
@@ -39,7 +39,21 @@ Implementation follows the **MASS-RAG** design from [Xiao et al., 2026 (arXiv:26
 
 ![MASS-RAG architecture](assets/architecture-massrag.png)
 
-Per-source filter agents run in parallel via `ThreadPoolExecutor`, so the retrieval wall time is roughly `max(per-source agent latency)` rather than the sum. The synthesis agent then dedupes by content fingerprint and condenses everything into a single context block.
+Standard RAG dumps the top-k retrieved passages straight into the final prompt and trusts the LLM to figure out what matters. MASS-RAG inserts a layer of *three analyst agents* between retrieval and generation. Each one reads the *same* retained passages through a different lens, and a synthesis agent then reconciles their outputs into a single evidence block before the final LLM ever sees it.
+
+**The three filter agents** (all GPT-5.4-mini on a ReAct scaffold, all seeing the same retained hits):
+
+- **Summarizer** writes an abstractive, query-focused summary of what the passages say. It does not answer the question; it just compresses the relevant material.
+- **Extractor** copies *verbatim* spans from the passages and tags each with its `[doc_id]`. No paraphrasing. This is what lets the downstream answer cite source text it did not invent.
+- **Reasoner** looks across passages for agreements, contradictions, and implicit connections, with a hard rule not to bring in outside knowledge. Every inference must be grounded in the retrieved text.
+
+The three run in parallel via `ThreadPoolExecutor(max_workers=3)`, so retrieval wall time is roughly `max(agent_latency)` not the sum.
+
+**The synthesis agent** (GPT-5.5) then receives all three outputs together with the original query, reconciles them into a single coherent evidence block, resolves any contradictions the Reasoner surfaced, and preserves the Extractor's `[doc_id]` citations. Its output is evidence only (no recommendation). The downstream LLM (cloud GPT-5.5 or local QLoRA Qwen) is what produces the actual recommendation, with this evidence block plus the NER / S-T-O findings concatenated into its prompt.
+
+**Fallback path.** Hits with cosine distance > 0.8 are dropped before the agents run. If no hits survive (the knowledge base has nothing relevant), MASS-RAG is skipped entirely and the final LLM is invoked with `enable_web_search=True` plus a "no KB match" prompt instead.
+
+**Why split the read.** On long DrugBank entries or multi-paragraph BioASQ abstracts, a single-pass LLM tends to either skim the surface and miss the relevant span, or hallucinate connecting tissue. Splitting the read across three specialised roles makes the misses observable in the per-agent panels in the UI, and gives the synthesis step structured material to reconcile rather than raw text to grep through.
 
 ---
 
