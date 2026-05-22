@@ -171,6 +171,7 @@ The trainer state lands in `models/qwen-medqa-adapter/`; the deployable GGUF lan
 │   ├── plot_training.py
 │   ├── upload_model_to_hf.py
 │   └── download_model_from_hf.py
+├── knowledge_bases/               # knowledge bases for the project
 ├── results/                       # eval CSVs + chart PNGs
 ├── assets/                        # screenshots, logo, architecture diagrams
 ├── data/qlora_training/           # train / val / test JSONL splits (seed 42)
