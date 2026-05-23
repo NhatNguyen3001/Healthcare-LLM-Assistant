@@ -1,19 +1,19 @@
 """
-Unsloth's save_pretrained_gguf path breaks on Windows because its dynamic patch
-of llama.cpp's convert_hf_to_gguf.py emits a bad `import conversion` that has
-no corresponding file on disk. This script does the same four steps directly:
+Sibling of export_to_ollama_qwen.py for the Llama-3.2-1B adapter. Same four
+manual steps because Unsloth's save_pretrained_gguf still breaks on Windows
+the same way regardless of base model.
 
   1. Merge: load fp16 base + LoRA adapter, peft.merge_and_unload(), save HF dir
   2. Convert: call llama.cpp's convert_hf_to_gguf.py -> F16 GGUF
   3. Quantize: call built llama-quantize.exe -> Q4_K_M (or chosen) GGUF
-  4. Modelfile: hand-write the Ollama spec with the Qwen2.5 chat template
+  4. Modelfile: hand-write the Ollama spec with the Llama-3 chat template
 
 Prerequisites (one-time):
     pip install -r C:\\Users\\Admin\\.unsloth\\llama.cpp\\requirements\\requirements-convert_hf_to_gguf.txt
 
 Run:
-    python scripts/export_to_ollama_manual.py
-    python scripts/export_to_ollama_manual.py --quant Q5_K_M
+    python scripts/export_to_ollama_llama32.py
+    python scripts/export_to_ollama_llama32.py --quant Q5_K_M
 """
 
 from __future__ import annotations
@@ -29,31 +29,38 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 REPO_ROOT     = Path(__file__).resolve().parent.parent
-ADAPTER_DIR   = REPO_ROOT / "models" / "qwen-medqa-adapter"
-MERGED_DIR    = REPO_ROOT / "models" / "qwen-medqa-merged"
-GGUF_DIR      = REPO_ROOT / "models" / "qwen-medqa-gguf"
+ADAPTER_DIR   = REPO_ROOT / "models" / "llama32-medqa-adapter"
+MERGED_DIR    = REPO_ROOT / "models" / "llama32-medqa-merged"
+GGUF_DIR      = REPO_ROOT / "models" / "llama32-medqa-gguf"
 LLAMA_CPP_DIR = Path(r"C:\Users\Admin\.unsloth\llama.cpp")
 
 # We merge against the un-quantized HF base, not Unsloth's bnb-4bit wrapper.
 # LoRA weights are architecture-keyed, not precision-keyed, so this is correct.
-BASE_MODEL_DEFAULT = "Qwen/Qwen2.5-1.5B-Instruct"
+# Llama-3.2 is gated; the user needs HF licence acceptance + `huggingface-cli login`
+# for this base id to download.
+BASE_MODEL_DEFAULT = "meta-llama/Llama-3.2-1B-Instruct"
 
 QUANT_DESCRIPTIONS = {
-    "Q4_K_M": "balanced default, ~1.0 GB",
-    "Q5_K_M": "safer for fine-tunes, ~1.1 GB",
-    "Q8_0":   "near-lossless, ~1.7 GB",
-    "F16":    "no quantization, ~3 GB",
+    "Q4_K_M": "balanced default, ~0.8 GB",
+    "Q5_K_M": "safer for fine-tunes, ~0.9 GB",
+    "Q8_0":   "near-lossless, ~1.3 GB",
+    "F16":    "no quantization, ~2.4 GB",
 }
 
-# Ollama uses Go templates. This matches Qwen2.5's training-time chat template
-# exactly -- the same one train_qlora.py applied via get_chat_template(..., "qwen-2.5").
-QWEN25_TEMPLATE = (
-    "{{ if .System }}<|im_start|>system\n"
-    "{{ .System }}<|im_end|>\n"
-    "{{ end }}{{ if .Prompt }}<|im_start|>user\n"
-    "{{ .Prompt }}<|im_end|>\n"
-    "{{ end }}<|im_start|>assistant\n"
-    "{{ .Response }}<|im_end|>\n"
+# Ollama uses Go templates. This matches Llama-3.2's training-time chat template
+# exactly -- the same one train_qlora_llama32.py applied via
+# get_chat_template(..., "llama-3.2"). Llama-3.2 1B/3B text models reuse the
+# Llama-3.1 token format (same <|begin_of_text|>, <|start_header_id|>...<|end_header_id|>,
+# <|eot_id|> markers), so this template block is identical regardless of which
+# "llama-3.x" template key was used at train time.
+LLAMA3_TEMPLATE = (
+    "<|begin_of_text|>"
+    "{{ if .System }}<|start_header_id|>system<|end_header_id|>\n\n"
+    "{{ .System }}<|eot_id|>"
+    "{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>\n\n"
+    "{{ .Prompt }}<|eot_id|>"
+    "{{ end }}<|start_header_id|>assistant<|end_header_id|>\n\n"
+    "{{ .Response }}<|eot_id|>"
 )
 
 
@@ -107,10 +114,13 @@ def step4_write_modelfile(gguf_dir: Path, gguf_name: str, system_prompt: str) ->
     if system_prompt:
         parts += [f'SYSTEM """{system_prompt}"""', ""]
     parts += [
-        f'TEMPLATE """{QWEN25_TEMPLATE.rstrip(chr(10))}"""',
+        f'TEMPLATE """{LLAMA3_TEMPLATE}"""',
         "",
-        'PARAMETER stop "<|im_start|>"',
-        'PARAMETER stop "<|im_end|>"',
+        # Llama-3 uses <|eot_id|> as the turn terminator; <|end_of_text|> ends
+        # the sequence. Both as stops so Ollama trims correctly in chat mode.
+        'PARAMETER stop "<|eot_id|>"',
+        'PARAMETER stop "<|end_of_text|>"',
+        'PARAMETER stop "<|start_header_id|>"',
         "PARAMETER temperature 0.3",
         "PARAMETER top_p 0.9",
     ]
@@ -130,16 +140,16 @@ def main() -> None:
                     help="Quantization method. " +
                          "; ".join(f"{k}={v}" for k, v in QUANT_DESCRIPTIONS.items()))
     ap.add_argument("--keep-merged-hf", action="store_true",
-                    help="Keep models/qwen-medqa-merged/ (default: delete; ~3 GB)")
+                    help="Keep models/llama32-medqa-merged/ (default: delete; ~2.5 GB)")
     ap.add_argument("--keep-f16-gguf", action="store_true",
-                    help="Keep the intermediate F16 GGUF (default: delete; ~3 GB)")
+                    help="Keep the intermediate F16 GGUF (default: delete; ~2.5 GB)")
     ap.add_argument("--system", default="",
                     help="Optional Modelfile SYSTEM prompt")
     args = ap.parse_args()
 
     # Pre-flight checks
     if not (args.adapter_dir / "adapter_config.json").exists():
-        raise SystemExit(f"no adapter at {args.adapter_dir} -- run train_qlora.py first")
+        raise SystemExit(f"no adapter at {args.adapter_dir} -- run train_qlora_llama32.py first")
     try:
         import gguf  # noqa: F401
     except ImportError:
@@ -178,8 +188,8 @@ def main() -> None:
     print()
     print("[done] register with Ollama:")
     print(f"          cd {args.output_dir}")
-    print( "          ollama create medqa-qwen -f Modelfile")
-    print( "          ollama run medqa-qwen \"What are the side effects of metformin?\"")
+    print( "          ollama create medqa-llama32 -f Modelfile")
+    print( "          ollama run medqa-llama32 \"What are the side effects of metformin?\"")
 
 
 if __name__ == "__main__":

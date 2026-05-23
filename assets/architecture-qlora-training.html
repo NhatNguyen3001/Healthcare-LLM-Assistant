@@ -47,7 +47,7 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>QLoRA Training Pipeline · Qwen2.5-1.5B → medqa-qwen</h1>
+        <h1>QLoRA Training Pipeline · shared recipe, two bases (Qwen2.5-1.5B + Llama-3.2-1B)</h1>
         <div class="toolbar">
           <div class="toolbar-actions">
             <button onclick="copyAsImage(this)">📋 Copy</button>
@@ -57,7 +57,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">6 datasets → 9,000 pairs → Unsloth + LoRA → adapter → llama.cpp Q4_K_M GGUF → Ollama</p>
+      <p class="subtitle">6 datasets → 9,000 pairs → Unsloth + LoRA (run once per base) → adapter → llama.cpp Q4_K_M GGUF → Ollama (medqa-qwen + medqa-llama32 tags)</p>
     </div>
 
     <div class="diagram-container">
@@ -98,41 +98,65 @@
 
         <rect x="660" y="260" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
         <text x="770" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">test.jsonl</text>
-        <text x="770" y="302" fill="#94a3b8" font-size="9" text-anchor="middle">450 pairs · held out for notebooks 05-07</text>
+        <text x="770" y="302" fill="#94a3b8" font-size="9" text-anchor="middle">450 pairs</text>
 
-        <!-- Stage 4: Training -->
-        <rect x="100" y="360" width="800" height="110" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="500" y="386" fill="white" font-size="12" font-weight="600" text-anchor="middle">QLoRA Training · Unsloth + Qwen2.5-1.5B-Instruct (4-bit NF4 via bitsandbytes)</text>
-        <text x="250" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">LoRA config</text>
-        <text x="250" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">r=16 · α=32 · dropout=0</text>
-        <text x="250" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">all 7 projection layers</text>
-        <text x="500" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">SFTTrainer (TRL)</text>
-        <text x="500" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">3 epochs · adamw_8bit · lr 2e-4 cosine</text>
-        <text x="500" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">seq 1024 · batch 2 × grad_accum 4 (eff. 8)</text>
-        <text x="750" y="412" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">Hardware</text>
-        <text x="750" y="428" fill="#94a3b8" font-size="9" text-anchor="middle">RTX 4060 8GB · bf16</text>
-        <text x="750" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">~5,667 s (~95 min)</text>
-        <text x="500" y="460" fill="#fbbf24" font-size="9" text-anchor="middle">best eval_loss 1.5536 @ epoch ~1.98 · deployed end-of-epoch-3 checkpoint</text>
 
-        <!-- Stage 5: Adapter -->
-        <rect x="300" y="500" width="400" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="500" y="524" fill="white" font-size="12" font-weight="600" text-anchor="middle">QLoRA Adapter (PEFT)</text>
-        <text x="500" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">models/qwen-medqa-adapter/ · adapter_model.safetensors · ~71 MB</text>
+        <!-- Stage 4: Training — TWO PARALLEL BRANCHES -->
+        <!-- Left branch: Qwen -->
+        <rect x="60" y="360" width="420" height="130" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#3b6e8f" stroke-width="2"/>
+        <text x="270" y="384" fill="white" font-size="12" font-weight="600" text-anchor="middle">scripts/train_qlora_qwen.py</text>
+        <text x="270" y="402" fill="#94a3b8" font-size="9" text-anchor="middle">Unsloth + Qwen2.5-1.5B-Instruct (4-bit NF4)</text>
+        <text x="270" y="421" fill="#3b6e8f" font-size="10" font-weight="600" text-anchor="middle">chat template = qwen-2.5</text>
+        <text x="270" y="439" fill="#94a3b8" font-size="9" text-anchor="middle">r=16 · α=32 · all 7 projections · seq 1024</text>
+        <text x="270" y="453" fill="#94a3b8" font-size="9" text-anchor="middle">3 epochs · adamw_8bit · lr 2e-4 cosine · batch 8</text>
+        <text x="270" y="485" fill="#fbbf24" font-size="9" text-anchor="middle">best eval_loss 1.5536 @ epoch ~1.98</text>
 
-        <!-- Stage 6: Export -->
-        <rect x="200" y="590" width="600" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="500" y="614" fill="white" font-size="12" font-weight="600" text-anchor="middle">scripts/export_to_ollama_manual.py</text>
-        <text x="500" y="632" fill="#94a3b8" font-size="9" text-anchor="middle">peft.merge_and_unload → llama.cpp convert_hf_to_gguf.py → llama-quantize Q4_K_M</text>
+        <!-- Right branch: Llama -->
+        <rect x="520" y="360" width="420" height="130" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#5e7a3b" stroke-width="2"/>
+        <text x="730" y="384" fill="white" font-size="12" font-weight="600" text-anchor="middle">scripts/train_qlora_llama32.py</text>
+        <text x="730" y="402" fill="#94a3b8" font-size="9" text-anchor="middle">Unsloth + Llama-3.2-1B-Instruct (4-bit NF4)</text>
+        <text x="730" y="421" fill="#5e7a3b" font-size="10" font-weight="600" text-anchor="middle">chat template = llama-3.2</text>
+        <text x="730" y="439" fill="#94a3b8" font-size="9" text-anchor="middle">r=16 · α=32 · all 7 projections · seq 1024</text>
+        <text x="730" y="453" fill="#94a3b8" font-size="9" text-anchor="middle">3 epochs · adamw_8bit · lr 2e-4 cosine · batch 8</text>
+        <text x="730" y="485" fill="#fbbf24" font-size="9" text-anchor="middle">see results/training_qlora_llama32.md</text>
 
-        <!-- Stage 7: GGUF -->
-        <rect x="300" y="680" width="400" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="500" y="704" fill="white" font-size="12" font-weight="600" text-anchor="middle">model.Q4_K_M.gguf + Modelfile</text>
-        <text x="500" y="722" fill="#94a3b8" font-size="9" text-anchor="middle">models/qwen-medqa-gguf/ · ~941 MB · ready for Ollama</text>
+        <!-- Stage 5: Adapter — TWO -->
+        <rect x="60" y="510" width="420" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#3b6e8f" stroke-width="2"/>
+        <text x="270" y="530" fill="white" font-size="11" font-weight="600" text-anchor="middle">models/qwen-medqa-adapter/</text>
+        <text x="270" y="547" fill="#94a3b8" font-size="9" text-anchor="middle">adapter_model.safetensors · ~82 MB (PEFT)</text>
 
-        <!-- Stage 8: Ollama -->
-        <rect x="200" y="770" width="600" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="500" y="794" fill="white" font-size="12" font-weight="600" text-anchor="middle">Ollama · medqa-qwen tag</text>
-        <text x="500" y="812" fill="#94a3b8" font-size="9" text-anchor="middle">ollama create medqa-qwen -f Modelfile · served at 127.0.0.1:11434 (loopback)</text>
+        <rect x="520" y="510" width="420" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#5e7a3b" stroke-width="2"/>
+        <text x="730" y="530" fill="white" font-size="11" font-weight="600" text-anchor="middle">models/llama32-medqa-adapter/</text>
+        <text x="730" y="547" fill="#94a3b8" font-size="9" text-anchor="middle">adapter_model.safetensors · ~50 MB (PEFT)</text>
+
+        <!-- Stage 6: Export — TWO -->
+        <rect x="60" y="580" width="420" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#3b6e8f" stroke-width="2"/>
+        <text x="270" y="600" fill="white" font-size="11" font-weight="600" text-anchor="middle">scripts/export_to_ollama_qwen.py</text>
+        <text x="270" y="617" fill="#94a3b8" font-size="9" text-anchor="middle">merge → convert_hf_to_gguf → quantize Q4_K_M → Modelfile</text>
+
+        <rect x="520" y="580" width="420" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#5e7a3b" stroke-width="2"/>
+        <text x="730" y="600" fill="white" font-size="11" font-weight="600" text-anchor="middle">scripts/export_to_ollama_llama32.py</text>
+        <text x="730" y="617" fill="#94a3b8" font-size="9" text-anchor="middle">merge → convert_hf_to_gguf → quantize Q4_K_M → Modelfile</text>
+
+        <!-- Stage 7: GGUF — TWO -->
+        <rect x="60" y="650" width="420" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#3b6e8f" stroke-width="2"/>
+        <text x="270" y="670" fill="white" font-size="11" font-weight="600" text-anchor="middle">models/qwen-medqa-gguf/model.Q4_K_M.gguf</text>
+        <text x="270" y="687" fill="#94a3b8" font-size="9" text-anchor="middle">~941 MB · Qwen chat template Modelfile</text>
+
+        <rect x="520" y="650" width="420" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#5e7a3b" stroke-width="2"/>
+        <text x="730" y="670" fill="white" font-size="11" font-weight="600" text-anchor="middle">models/llama32-medqa-gguf/model.Q4_K_M.gguf</text>
+        <text x="730" y="687" fill="#94a3b8" font-size="9" text-anchor="middle">~770 MB · Llama-3 chat template Modelfile</text>
+
+        <!-- Stage 8: Ollama daemon — SHARED (branches rejoin) -->
+        <rect x="120" y="730" width="760" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="500" y="754" fill="white" font-size="13" font-weight="600" text-anchor="middle">Ollama · at 127.0.0.1:11434 (loopback)</text>
+        <text x="500" y="772" fill="#94a3b8" font-size="9" text-anchor="middle">OLLAMA_MAX_LOADED_MODELS=3 default · both QLoRA models coexist in &lt;4 GB VRAM</text>
+        <!-- Inner tag pill: Qwen -->
+        <rect x="180" y="788" width="280" height="30" rx="14" fill="rgba(59, 110, 143, 0.25)" stroke="#3b6e8f" stroke-width="1.5"/>
+        <text x="320" y="808" fill="white" font-size="11" font-weight="600" text-anchor="middle">tag: medqa-qwen</text>
+        <!-- Inner tag pill: Llama -->
+        <rect x="540" y="788" width="280" height="30" rx="14" fill="rgba(94, 122, 59, 0.25)" stroke="#5e7a3b" stroke-width="1.5"/>
+        <text x="680" y="808" fill="white" font-size="11" font-weight="600" text-anchor="middle">tag: medqa-llama32</text>
 
         <!-- Arrows -->
         <line x1="500" y1="140" x2="500" y2="168" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
@@ -142,36 +166,46 @@
         <line x1="500" y1="230" x2="500" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <line x1="500" y1="230" x2="770" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-        <!-- Stage 3 → Stage 4 (3 boxes → training) -->
-        <line x1="230" y1="320" x2="350" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="240" y="346" fill="#a78bfa" font-size="9">train</text>
-        <line x1="500" y1="320" x2="500" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="510" y="346" fill="#a78bfa" font-size="9">eval</text>
-        <line x1="770" y1="320" x2="650" y2="358" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)" stroke-dasharray="4,4"/>
-        <text x="710" y="346" fill="#a78bfa" font-size="9">held out</text>
+        <!-- Stage 3 → Stage 4 (split + branch) -->
+        <!-- train → both branches -->
+        <line x1="230" y1="320" x2="200" y2="358" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="230" y1="320" x2="600" y2="358" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="240" y="346" fill="#a78bfa" font-size="9">train (×2)</text>
+        <!-- val → both branches -->
+        <line x1="500" y1="320" x2="340" y2="358" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="500" y1="320" x2="740" y2="358" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="510" y="346" fill="#a78bfa" font-size="9">val (×2)</text>
 
-        <!-- Stage 4 → Stage 5 -->
-        <line x1="500" y1="470" x2="500" y2="498" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- Stage 4 → Stage 5 (per branch) -->
+        <line x1="270" y1="490" x2="270" y2="508" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="730" y1="490" x2="730" y2="508" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-        <!-- Stage 5 → Stage 6 -->
-        <line x1="500" y1="560" x2="500" y2="588" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- Stage 5 → Stage 6 (per branch) -->
+        <line x1="270" y1="560" x2="270" y2="578" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="730" y1="560" x2="730" y2="578" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-        <!-- Stage 6 → Stage 7 -->
-        <line x1="500" y1="650" x2="500" y2="678" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- Stage 6 → Stage 7 (per branch) -->
+        <line x1="270" y1="630" x2="270" y2="648" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="730" y1="630" x2="730" y2="648" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-        <!-- Stage 7 → Stage 8 -->
-        <line x1="500" y1="740" x2="500" y2="768" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- Stage 7 → Stage 8 (rejoin into shared daemon) -->
+        <line x1="270" y1="700" x2="320" y2="728" stroke="#3b6e8f" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="730" y1="700" x2="680" y2="728" stroke="#5e7a3b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
         <!-- Legend (top-right inside SVG, below the dataset box) -->
         <text x="855" y="170" fill="white" font-size="10" font-weight="600">Legend</text>
         <rect x="855" y="182" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
-        <text x="877" y="190" fill="#94a3b8" font-size="8">Data source</text>
+        <text x="877" y="190" fill="#94a3b8" font-size="8">Data / runtime</text>
         <rect x="855" y="198" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
         <text x="877" y="206" fill="#94a3b8" font-size="8">Script / step</text>
         <rect x="855" y="214" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
         <text x="877" y="222" fill="#94a3b8" font-size="8">Artifact</text>
-        <line x1="855" y1="236" x2="871" y2="236" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="877" y="239" fill="#94a3b8" font-size="8">Held out</text>
+        <rect x="855" y="230" width="16" height="10" rx="2" fill="rgba(59, 110, 143, 0.25)" stroke="#3b6e8f" stroke-width="1.5"/>
+        <text x="877" y="238" fill="#94a3b8" font-size="8">Qwen branch</text>
+        <rect x="855" y="246" width="16" height="10" rx="2" fill="rgba(94, 122, 59, 0.25)" stroke="#5e7a3b" stroke-width="1.5"/>
+        <text x="877" y="254" fill="#94a3b8" font-size="8">Llama branch</text>
+        <line x1="855" y1="266" x2="871" y2="266" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="877" y="269" fill="#94a3b8" font-size="8">Held out</text>
       </svg>
     </div>
 
@@ -190,22 +224,22 @@
         <ul>
           <li>• 4-bit NF4 base via bitsandbytes</li>
           <li>• LoRA targets all 7 projections</li>
-          <li>• ~95 min wall time on RTX 4060</li>
-          <li>• best eval_loss 1.5536 @ epoch 1.98</li>
+          <li>• Qwen: ~95 min · Llama: ~30-45 min (RTX 4060)</li>
+          <li>• Same data + recipe — isolates base-model effect</li>
         </ul>
       </div>
       <div class="card">
         <div class="card-header"><div class="card-dot violet"></div><h3>Export &amp; deploy</h3></div>
         <ul>
-          <li>• Adapter ~71 MB (PEFT safetensors)</li>
-          <li>• GGUF Q4_K_M ~941 MB for Ollama</li>
+          <li>• Adapter ~50-82 MB (PEFT safetensors, per base)</li>
+          <li>• GGUF Q4_K_M ~770-941 MB for Ollama</li>
           <li>• Manual llama.cpp path (Unsloth Win bug)</li>
-          <li>• Tag: medqa-qwen @ 127.0.0.1:11434</li>
+          <li>• Tags: medqa-qwen + medqa-llama32 @ 127.0.0.1:11434</li>
         </ul>
       </div>
     </div>
 
-    <p class="footer">QLoRA Training Pipeline · Qwen2.5-1.5B-Instruct → medqa-qwen · COMP8420 2026</p>
+    <p class="footer">QLoRA Training Pipeline · Qwen2.5-1.5B + Llama-3.2-1B → medqa-qwen + medqa-llama32 · COMP8420 2026</p>
   </div>
 
   <script>

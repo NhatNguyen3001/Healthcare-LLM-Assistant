@@ -90,6 +90,15 @@ st.set_page_config(
 )
 
 
+# Sidebar selector keys -> display labels. Single source of truth so the
+# selectbox and the "via X" recommendation chip never drift apart.
+MODEL_LABELS: dict[str, str] = {
+    "cloud":         "GPT-5.5 (cloud)",
+    "local_qwen":    "QLoRA Qwen2.5-1.5B (local)",
+    "local_llama32": "QLoRA Llama-3.2-1B (local)",
+}
+
+
 # ------------------------------------------------------------- Cached loaders
 
 @st.cache_resource(show_spinner="Warming up clinical NLP models (one-time, ~40s)")
@@ -366,17 +375,14 @@ def sidebar():
         # (see llm.py router). Persisted across turns via session_state.
         st.selectbox(
             "Generator",
-            options=["cloud", "local"],
-            format_func=lambda c: (
-                "GPT-5.5" if c == "cloud"
-                else "Qwen2.5-1.5B + QLoRA"
-            ),
+            options=["cloud", "local_qwen", "local_llama32"],
+            format_func=lambda c: MODEL_LABELS[c],
             key="model_choice",
             label_visibility="collapsed",
             help=(
-                "cloud = OpenAI Responses API. "
-                "local = your QLoRA-fine-tuned Qwen via Ollama at "
-                "127.0.0.1:11434."
+                "cloud = OpenAI GPT-5.5 via the Responses API. "
+                "local_qwen / local_llama32 = your QLoRA fine-tunes served by "
+                "one Ollama daemon at 127.0.0.1:11434."
             ),
         )
 
@@ -692,10 +698,7 @@ def run_pipeline(user_input: str, audio_bytes, audio_name, chat: dict) -> dict:
 
     # 6) Recommendation — streamed
     model_choice = st.session_state.get("model_choice", "cloud")
-    model_display = (
-        "GPT-5.5" if model_choice == "cloud"
-        else "Qwen2.5-1.5B + QLoRA"
-    )
+    model_display = MODEL_LABELS.get(model_choice, model_choice)
     with ph_rec.container(border=True):
         st.markdown(
             "<div style='background:#e2dfd9;border-left:4px solid #475569;"

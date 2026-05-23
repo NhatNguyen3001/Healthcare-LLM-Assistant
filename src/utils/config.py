@@ -23,8 +23,11 @@ TRANSCRIPTION_MODEL = os.getenv("TRANSCRIPTION_MODEL", "gpt-4o-transcribe")
 # --- Local LLM (Ollama, Phase 6.5) ---
 # Ollama binds to localhost only by default; the Streamlit app reaches the
 # daemon over loopback. Never expose 11434 publicly.
-OLLAMA_BASE_URL  = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "medqa-qwen")
+# Two QLoRA backends are served by the same `ollama serve` daemon; the router
+# in src/pipeline/llm.py picks which tag to hit based on UI selection.
+OLLAMA_BASE_URL    = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+LOCAL_MODEL_QWEN    = os.getenv("LOCAL_MODEL_QWEN", "medqa-qwen")
+LOCAL_MODEL_LLAMA32 = os.getenv("LOCAL_MODEL_LLAMA32", "medqa-llama32")
 
 # --- ChromaDB ---
 CHROMA_PERSIST_PATH      = PROJECT_ROOT / os.getenv("CHROMA_PERSIST_PATH", "data/chromadb")

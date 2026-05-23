@@ -1,15 +1,24 @@
 """
-QLoRA fine-tune of Qwen2.5-1.5B-Instruct on the medical Q/A mix.
+QLoRA fine-tune of Llama-3.2-1B-Instruct on the medical Q/A mix.
 
-Reads data/qlora_training/{train,val}.jsonl, applies the Qwen2.5 chat template,
+Reads data/qlora_training/{train,val}.jsonl, applies the Llama-3.1 chat template,
 runs SFT with LoRA adapters on top of a 4-bit-quantized base (QLoRA), and saves
-the adapter to models/qwen-medqa-adapter/.
+the adapter to models/llama32-medqa-adapter/.
 
-Expected wall time on RTX 4060 (8 GB): ~30-50 min for 3 epochs over ~27.5k pairs.
-Peak VRAM during training: ~5-6 GB.
+Sibling of train_qlora_qwen.py — same dataset, same hparams, different base.
+Letting the two models share a recipe is the point: it isolates base-model
+effect in the 3-way bake-off (cloud GPT vs Qwen-1.5B vs Llama-3.2-1B).
+
+Expected wall time on RTX 4060 (8 GB): ~25-45 min for 3 epochs (1B is a touch
+smaller than the Qwen 1.5B run; same data, similar throughput).
+Peak VRAM during training: ~4-5 GB.
+
+Llama-3.2 is a gated model on Hugging Face. Before first run:
+  1. Accept the licence on https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct
+  2. `huggingface-cli login` with a token that has access
 
 Run:
-    python scripts/train_qlora.py
+    python scripts/train_qlora_llama32.py
 """
 
 from __future__ import annotations
@@ -30,14 +39,15 @@ from trl import SFTTrainer, SFTConfig
 
 REPO_ROOT  = Path(__file__).resolve().parent.parent
 DATA_DIR   = REPO_ROOT / "data"   / "qlora_training"
-OUTPUT_DIR = REPO_ROOT / "models" / "qwen-medqa-adapter"
+OUTPUT_DIR = REPO_ROOT / "models" / "llama32-medqa-adapter"
 
-# Pre-quantized 4-bit Qwen2.5 hosted by Unsloth. Saves ~30s of on-the-fly
-# quantization vs loading Qwen/Qwen2.5-1.5B-Instruct and quantizing locally.
-BASE_MODEL = "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit"
+# Pre-quantized 4-bit Llama-3.2-1B hosted by Unsloth. Same trick as the Qwen
+# sibling: saves ~30s of on-the-fly quantization vs loading the upstream weights.
+# Unsloth's mirror also skips the HF gating step for the base weights (the
+# Modelfile + Ollama side still need the licence accepted at deploy time).
+BASE_MODEL = "unsloth/Llama-3.2-1B-Instruct-bnb-4bit"
 
-# Covers ~99% of MedQuAD answers (we capped answers to 1500 chars in prep,
-# which is ~375 tokens; plus question + chat-template overhead stays well under).
+# Same context budget as the Qwen run so the prepared JSONLs are valid as-is.
 MAX_SEQ_LEN = 1024
 
 
@@ -76,16 +86,19 @@ def main() -> None:
         load_in_4bit    = True,        # the "Q" in QLoRA
     )
 
-    # ---- Pin the Qwen2.5 chat template ------------------------------------------
-    # This MUST match what Ollama serves with at inference time. The stock Qwen2.5
-    # Modelfile that Unsloth's `save_pretrained_gguf` writes uses this same template,
-    # so train-time and deploy-time stay aligned. Don't hand-roll the template string.
-    tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
+    # ---- Pin the Llama-3.2 chat template ----------------------------------------
+    # This MUST match what Ollama serves with at inference time. The export
+    # script's Modelfile uses the same template tokens (<|begin_of_text|>,
+    # <|start_header_id|>...<|end_header_id|>, <|eot_id|>) so train-time and
+    # deploy-time stay aligned. Unsloth ships an explicit "llama-3.2" template
+    # key (it's a separate entry from "llama-3.1" in CHAT_TEMPLATES even though
+    # the token format is the same for 1B/3B text models).
+    tokenizer = get_chat_template(tokenizer, chat_template="llama-3.2")
 
     # ---- Attach LoRA adapters to the 4-bit base ---------------------------------
-    # All 7 projection layers (attention + MLP). For 1.5B models, adapting the MLP
-    # layers in addition to attention gives a noticeable quality lift over the
-    # attention-only configuration that the original QLoRA paper used on 65B Llama.
+    # Same 7-projection layout as the Qwen sibling so the bake-off isolates the
+    # base-model effect, not the adapter shape. r=16 a=32 is the sweet spot for
+    # 1-1.5B models per Unsloth's own ablations.
     model = FastLanguageModel.get_peft_model(
         model,
         r              = args.lora_r,
@@ -119,7 +132,7 @@ def main() -> None:
     print(f"[train]   train rows : {len(ds['train']):>6}")
     print(f"[train]   val rows   : {len(ds['val']):>6}")
 
-    # Apply the Qwen2.5 chat template to each row, producing a single "text" string.
+    # Apply the Llama-3.1 chat template to each row, producing a single "text" string.
     # add_generation_prompt=False because we want the full Q+A turn in the training
     # text -- the model needs to see both sides to learn to produce the assistant turn.
     def format_row(row):
@@ -163,17 +176,16 @@ def main() -> None:
         args          = sft_config,
     )
 
-    # Loss-mask user tokens so gradients only flow on assistant tokens. Without this,
-    # the model wastes capacity learning to predict the user's question -- a measurable
-    # quality hit on QA fine-tunes. Token markers below are Qwen2.5-specific.
+    # Loss-mask user tokens so gradients only flow on assistant tokens. Same
+    # rationale as the Qwen run; token markers below are Llama-3-specific.
     trainer = train_on_responses_only(
         trainer,
-        instruction_part = "<|im_start|>user\n",
-        response_part    = "<|im_start|>assistant\n",
+        instruction_part = "<|start_header_id|>user<|end_header_id|>\n\n",
+        response_part    = "<|start_header_id|>assistant<|end_header_id|>\n\n",
     )
 
     # ---- Train ------------------------------------------------------------------
-    print("[train] starting training (expect ~30-50 min on RTX 4060)")
+    print("[train] starting training (expect ~25-45 min on RTX 4060)")
     train_result = trainer.train()
     runtime_s = train_result.metrics["train_runtime"]
     print(f"[train] done in {runtime_s:.1f}s ({runtime_s/60:.1f} min)")
@@ -181,7 +193,7 @@ def main() -> None:
     # ---- Save the final adapter -------------------------------------------------
     # Note: SFTTrainer's save_strategy="epoch" has already saved checkpoints during
     # training. This final save guarantees the latest weights land at output_dir/
-    # with the names export_to_ollama.py expects.
+    # with the names export_to_ollama_llama32.py expects.
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(f"[train] saving adapter to {args.output_dir}")
     model.save_pretrained(str(args.output_dir))
@@ -191,7 +203,7 @@ def main() -> None:
     metrics_path = args.output_dir / "training_metrics.json"
     metrics = {
         "base_model":             BASE_MODEL,
-        "chat_template":          "qwen-2.5",
+        "chat_template":          "llama-3.2",
         "epochs":                 args.epochs,
         "learning_rate":          args.lr,
         "per_device_batch_size":  args.batch_size,

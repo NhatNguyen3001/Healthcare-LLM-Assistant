@@ -12,6 +12,10 @@ data/chats/
 models/*.pkl
 models/qwen-medqa-adapter/
 models/qwen-medqa-gguf/
+models/llama32-medqa-adapter/
+models/llama32-medqa-gguf/
+# Intermediate merged-fp16 checkpoints from export_to_ollama_*.py (~3 GB each)
+models/*-medqa-merged/
 
 # Eval reports — keep CSVs + charts; markdown reports are local-only
 results/*.md

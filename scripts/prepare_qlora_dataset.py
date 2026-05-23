@@ -16,9 +16,10 @@ Output schema (one JSON object per line):
               | "drugbank-mechanism_of_action"
   }
 
-The Qwen2.5 chat template is NOT applied here. We keep messages-format on disk
-so train_qlora.py can call tokenizer.apply_chat_template at train time. This
-lets us swap base models without rebuilding the dataset.
+No chat template is applied here. We keep messages-format on disk so each
+train_qlora_{qwen,llama32}.py script can call tokenizer.apply_chat_template
+at train time with its own base-specific template. This is what lets the two
+QLoRA fine-tunes share one prepared dataset.
 
 Run:
     python scripts/prepare_qlora_dataset.py

@@ -112,8 +112,6 @@
         <text x="800" y="441" fill="#94a3b8" font-size="9" text-anchor="middle">contradictions, implicit</text>
         <text x="800" y="455" fill="#94a3b8" font-size="9" text-anchor="middle">connections only</text>
 
-        <!-- Parallel-execution annotation -->
-        <text x="500" y="495" fill="#fbbf24" font-size="9" text-anchor="middle">running in parallel via ThreadPoolExecutor (wall time ≈ max-of-3, not sum-of-3)</text>
 
         <!-- Stage 5: Synthesis -->
         <rect x="200" y="520" width="600" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
@@ -128,8 +126,9 @@
 
         <!-- Stage 7: Final LLM -->
         <rect x="200" y="740" width="600" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="500" y="764" fill="white" font-size="12" font-weight="600" text-anchor="middle">Final LLM (sidebar-selectable)</text>
-        <text x="500" y="782" fill="#94a3b8" font-size="9" text-anchor="middle">GPT-5.5 via OpenAI Responses API · OR · medqa-qwen via Ollama loopback</text>
+        <text x="500" y="760" fill="white" font-size="12" font-weight="600" text-anchor="middle">Final LLM (sidebar-selectable · 3 options)</text>
+        <text x="500" y="776" fill="#94a3b8" font-size="9" text-anchor="middle">GPT-5.5 via OpenAI Responses API · OR</text>
+        <text x="500" y="790" fill="#94a3b8" font-size="9" text-anchor="middle">medqa-qwen · medqa-llama32 via one Ollama daemon (loopback)</text>
 
         <!-- Arrows -->
         <line x1="500" y1="100" x2="500" y2="138" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>

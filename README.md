@@ -3,13 +3,13 @@
 
   <h1>Healthcare NLP Assistant</h1>
 
-  <p><i>A locally-deployable clinical Q&A system: voice in, privacy-filtered, multi-agent RAG, with a QLoRA-fine-tuned local LLM benchmarked head-to-head against GPT-5.5.</i></p>
+  <p><i>A locally-deployable clinical Q&A system: voice in, privacy-filtered, multi-agent RAG, with two QLoRA-fine-tuned local LLMs (Qwen2.5-1.5B + Llama-3.2-1B) benchmarked head-to-head against GPT-5.5.</i></p>
 
   <p>
     <a href="https://huggingface.co/Davis426/COMP8420-Healthcare-LLM-Assistant"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Model-Hugging%20Face-yellow" alt="HF Model"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12-blue" alt="Python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-    <img src="https://img.shields.io/badge/base--model-Qwen2.5--1.5B-orange" alt="Base model">
+    <img src="https://img.shields.io/badge/QLoRA-Qwen2.5--1.5B%20%2B%20Llama--3.2--1B-orange" alt="Base models">
   </p>
 </div>
 
@@ -19,9 +19,9 @@
 
 1. **End-to-end voice pipeline** → PII railguard → grounded clinical recommendation. Speak a symptom into the browser; get a recommendation in under 10 seconds. PII is masked before any LLM call.
 
-2. **Multi-agent retrieval (MASS-RAG)** over six biomedical knowledge bases (~55.9k cleaned chunks). Three role-based filter agents (Summarizer · Extractor · Reasoner) fan out in parallel over the retained hits; a synthesis agent reconciles their outputs before the final LLM call. Drops in either GPT-5.5 (cloud) or the local QLoRA Qwen via Ollama.
+2. **Multi-agent retrieval (MASS-RAG)** over six biomedical knowledge bases (~55.9k cleaned chunks). Three role-based filter agents (Summarizer · Extractor · Reasoner) fan out in parallel over the retained hits; a synthesis agent reconciles their outputs before the final LLM call. Drops in GPT-5.5 (cloud) or either QLoRA model (Qwen / Llama) via Ollama.
 
-3. **QLoRA-fine-tuned Qwen2.5-1.5B vs GPT-5.5**, evaluated three ways: ROUGE / BERTScore (PubMedBERT backbone) / LLM-as-judge. Includes a written-up negative finding (template substitution beats factual improvement on surface metrics) because that's the more honest story.
+3. **3-way bake-off: GPT-5.5 vs QLoRA Qwen2.5-1.5B vs QLoRA Llama-3.2-1B**, evaluated three ways: ROUGE / BERTScore (PubMedBERT backbone) / LLM-as-judge. Both QLoRA variants share the same data + recipe so any gap isolates the base-model contribution. Includes a written-up negative finding (template substitution beats factual improvement on surface metrics) because that's the more honest story.
 
 ![Main chat UI](assets/main-chat-UI.png)
 
@@ -49,7 +49,7 @@ Standard RAG dumps the top-k retrieved passages straight into the final prompt a
 
 The three run in parallel via `ThreadPoolExecutor(max_workers=3)`, so retrieval wall time is roughly `max(agent_latency)` not the sum.
 
-**The synthesis agent** (GPT-5.5) then receives all three outputs together with the original query, reconciles them into a single coherent evidence block, resolves any contradictions the Reasoner surfaced, and preserves the Extractor's `[doc_id]` citations. Its output is evidence only (no recommendation). The downstream LLM (cloud GPT-5.5 or local QLoRA Qwen) is what produces the actual recommendation, with this evidence block plus the NER / S-T-O findings concatenated into its prompt.
+**The synthesis agent** (GPT-5.5) then receives all three outputs together with the original query, reconciles them into a single coherent evidence block, resolves any contradictions the Reasoner surfaced, and preserves the Extractor's `[doc_id]` citations. Its output is evidence only (no recommendation). The downstream LLM (cloud GPT-5.5 or one of the local QLoRA models — Qwen2.5-1.5B or Llama-3.2-1B) is what produces the actual recommendation, with this evidence block plus the NER / S-T-O findings concatenated into its prompt.
 
 **Fallback path.** Hits with cosine distance > 0.8 are dropped before the agents run. If no hits survive (the knowledge base has nothing relevant), MASS-RAG is skipped entirely and the final LLM is invoked with `enable_web_search=True` plus a "no KB match" prompt instead.
 
@@ -66,7 +66,7 @@ The three run in parallel via `ThreadPoolExecutor(max_workers=3)`, so retrieval 
 | Embeddings | `pritamdeka/S-PubMedBert-MS-MARCO` |
 | Medical NER | scispaCy 0.5.4 + `en_ner_bc5cdr_md` |
 | Cloud LLM | OpenAI Responses API (GPT-5.5 generation, GPT-5.4-mini filter agents, GPT-5.4 judge) |
-| Local LLM | Qwen2.5-1.5B-Instruct + QLoRA, served via Ollama at `127.0.0.1:11434` |
+| Local LLM | Two QLoRA fine-tunes (Qwen2.5-1.5B-Instruct, Llama-3.2-1B-Instruct), both served by one Ollama daemon at `127.0.0.1:11434` |
 | Fine-tune | Unsloth (`peft`, `trl`, `bitsandbytes`) + manual llama.cpp export |
 | Transcription | `gpt-4o-transcribe` API |
 | Classical ML | scikit-learn (sentiment + specialty classifier) |
@@ -75,22 +75,26 @@ The three run in parallel via `ThreadPoolExecutor(max_workers=3)`, so retrieval 
 
 ## Quickstart
 
-### Minimal: just try the QLoRA model via Ollama
+### Minimal: just try the QLoRA models via Ollama
 
 ```bash
 # 1. Install Ollama (https://ollama.com/download). On Windows it auto-starts as a service.
 
-# 2. Pull the GGUF + Modelfile from Hugging Face.
+# 2. Pull both fine-tunes (or one) from Hugging Face. The HF repo has them in
+#    sibling subfolders qwen/ and llama32/.
 pip install huggingface_hub
 huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
-  --include "qwen-medqa-gguf/*" --local-dir ./models
+  --include "qwen/qwen-medqa-gguf/*" --local-dir ./models
+huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
+  --include "llama32/llama32-medqa-gguf/*" --local-dir ./models
 
-# 3. Register with Ollama.
-cd models/qwen-medqa-gguf
-ollama create medqa-qwen -f Modelfile
+# 3. Register both with Ollama (one daemon serves both tags concurrently).
+cd models/qwen/qwen-medqa-gguf && ollama create medqa-qwen -f Modelfile && cd ../../..
+cd models/llama32/llama32-medqa-gguf && ollama create medqa-llama32 -f Modelfile && cd ../../..
 
-# 4. Ask anything.
+# 4. Ask anything (pick a tag).
 ollama run medqa-qwen "What are the side effects of amoxicillin?"
+ollama run medqa-llama32 "What are the side effects of amoxicillin?"
 ```
 
 ### Full system: voice + RAG + sidebar model selector
@@ -109,9 +113,11 @@ pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/e
 cp .env.example .env
 # Edit .env and paste your OPENAI_API_KEY.
 
-# 4. Install Ollama (https://ollama.com/download), then fetch + register the local model.
+# 4. Install Ollama (https://ollama.com/download), then fetch + register both local models.
+#    --target {qwen,llama32,both} controls what's downloaded; default is both.
 python scripts/download_model_from_hf.py
 cd models/qwen-medqa-gguf && ollama create medqa-qwen -f Modelfile && cd ../..
+cd models/llama32-medqa-gguf && ollama create medqa-llama32 -f Modelfile && cd ../..
 
 # 5. Build the ChromaDB index (see "Datasets" below for raw data; takes ~10 min).
 python scripts/build_chromadb.py
@@ -126,7 +132,7 @@ The login screen accepts any name (no password). Same name on next launch = same
   <img src="assets/log-in-UI.png" width="600" alt="Login UI" />
 </div>
 
-The sidebar has a model selector (`cloud` = GPT-5.5, `local` = your QLoRA Qwen). MASS-RAG filter agents always stay on the cloud; only the final-answer generator switches.
+The sidebar has a 3-way model selector for the final-answer generator: **GPT-5.5 (cloud)**, **QLoRA Qwen2.5-1.5B (local)**, or **QLoRA Llama-3.2-1B (local)**. MASS-RAG filter agents always stay on the cloud; only the final-answer generator switches.
 
 ---
 
@@ -135,17 +141,21 @@ The sidebar has a model selector (`cloud` = GPT-5.5, `local` = your QLoRA Qwen).
 ![QLoRA training pipeline](assets/architecture-qlora-training.png)
 
 ```bash
-# Build the 9,000-pair train/val/test splits from raw datasets.
+# Build the 9,000-pair train/val/test splits from raw datasets (shared across both QLoRA variants).
 python scripts/prepare_qlora_dataset.py --per-source-limit 1500
 
-# Run QLoRA fine-tune (~95 min on RTX 4060 8GB).
-python scripts/train_qlora.py
+# --- Qwen variant (~95 min on RTX 4060 8GB) ---
+python scripts/train_qlora_qwen.py
+python scripts/export_to_ollama_qwen.py
 
-# Merge adapter, convert to GGUF, quantize to Q4_K_M (Windows-friendly manual path).
-python scripts/export_to_ollama_manual.py
+# --- Llama-3.2 variant (~30-45 min on RTX 4060 8GB; smaller base) ---
+# Llama-3.2 is gated: accept the licence at https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct
+# and `huggingface-cli login` with a token that has access first.
+python scripts/train_qlora_llama32.py
+python scripts/export_to_ollama_llama32.py
 ```
 
-The trainer state lands in `models/qwen-medqa-adapter/`; the deployable GGUF lands in `models/qwen-medqa-gguf/`. Loss curves and the source mix chart land in `results/qlora_loss_curve.png` + `results/qlora_source_mix.png`; the Hugging Face model card has the full hyperparam write-up.
+The trainer state lands in `models/{qwen,llama32}-medqa-adapter/`; the deployable GGUFs land in `models/{qwen,llama32}-medqa-gguf/`. Loss curves and the source mix chart land in `results/qlora_loss_curve.png` + `results/qlora_source_mix.png`; the Hugging Face model card has the full hyperparam write-up. The two scripts share the same dataset and the same LoRA shape (r=16, α=32, all 7 projection layers) so any quality gap between them isolates the base-model effect.
 
 ---
 
@@ -164,13 +174,15 @@ The trainer state lands in `models/qwen-medqa-adapter/`; the deployable GGUF lan
 ├── scripts/
 │   ├── build_chromadb.py
 │   ├── prepare_qlora_dataset.py
-│   ├── train_qlora.py
+│   ├── train_qlora_qwen.py            # QLoRA fine-tune on Qwen2.5-1.5B base
+│   ├── train_qlora_llama32.py         # QLoRA fine-tune on Llama-3.2-1B base
 │   ├── train_sentiment.py
 │   ├── train_classifier.py
-│   ├── export_to_ollama_manual.py
+│   ├── export_to_ollama_qwen.py       # merge + GGUF + Q4_K_M + Modelfile for Qwen
+│   ├── export_to_ollama_llama32.py    # same for Llama
 │   ├── plot_training.py
-│   ├── upload_model_to_hf.py
-│   └── download_model_from_hf.py
+│   ├── upload_model_to_hf.py          # --target {qwen,llama32,both}
+│   └── download_model_from_hf.py      # --target {qwen,llama32,both}
 ├── knowledge_bases/               # knowledge bases for the project
 ├── results/                       # eval CSVs + chart PNGs
 ├── assets/                        # screenshots, logo, architecture diagrams
@@ -180,7 +192,7 @@ The trainer state lands in `models/qwen-medqa-adapter/`; the deployable GGUF lan
 └── README.md
 ```
 
-Heavy artifacts (`data/chromadb/`, `models/qwen-medqa-*`, raw `knowledge_bases/`) are gitignored. Trained models come from Hugging Face; ChromaDB rebuilds from `scripts/build_chromadb.py`.
+Heavy artifacts (`data/chromadb/`, `models/qwen-medqa-*`, `models/llama32-medqa-*`, raw `knowledge_bases/`) are gitignored. Trained models come from Hugging Face; ChromaDB rebuilds from `scripts/build_chromadb.py`.
 
 ---
 
@@ -207,14 +219,39 @@ Cleaning scripts live in the per-source folders under `knowledge_bases/`. The Q&
 
 100 stratified test pairs (`SAMPLE_N=100`, `seed=42`) drawn from the QLoRA test split, evaluated three ways. Full numbers + charts in [`results/`](results/).
 
-| Metric | GPT-5.5 | QLoRA Qwen (this model) | Notes |
-|---|---|---|---|
-| ROUGE-L | baseline | **+0.022 (+12% rel)** | template substitution effect |
-| BERTScore-F1 (PubMedBERT) | baseline | **+0.0067 (+0.8% rel)** | semantic surface similarity only |
-| Judge: Accuracy (GPT-5.4) | **leads** | trails | the load-bearing factuality metric |
-| Judge: Clarity / Completeness / Safety | comparable | comparable | see `results/llm_judge_evaluation.csv` + `llm_judge_eval_chart.png` |
+### Surface metrics (ROUGE + BERTScore with PubMedBERT backbone)
 
-**Honest framing**: the QLoRA model's surface-metric wins come from template substitution on DrugBank-style entries (71+ sibling templates in train share the same skeleton); the model slot-fills the entity at inference and scores well on ROUGE / BERTScore even when the entity is wrong. The LLM-as-judge Accuracy dimension catches this; BERTScore (even with PubMedBERT) does not. See `notebooks/05_llm_generation_evaluation.ipynb` for the full discussion.
+| Metric | GPT-5.5 | QLoRA Qwen2.5-1.5B | QLoRA Llama-3.2-1B |
+|---|---|---|---|
+| ROUGE-1 | 0.2955 | 0.2997 | **0.3049** |
+| ROUGE-2 | 0.0907 | **0.1087** | 0.1105 |
+| ROUGE-L | 0.1921 | **0.2101** | 0.2046 |
+| BERTScore-F1 | 0.8221 | **0.8293** | 0.8272 |
+
+Both QLoRA models edge out GPT-5.5 on surface metrics. The win is driven by **template substitution** on DrugBank-style entries (71+ sibling templates in train share the same skeleton); the fine-tunes learn the template and slot-fill the entity at inference. ROUGE and BERTScore reward this even when the substituted entity is wrong.
+
+### LLM-as-judge (GPT-5.4, 0-10 scale)
+
+| Dimension | GPT-5.5 | QLoRA Qwen | QLoRA Llama-3.2 |
+|---|---|---|---|
+| Accuracy | **9.26** | 3.57 | 2.77 |
+| Completeness | **8.24** | 3.08 | 2.70 |
+| Clarity | **9.35** | 6.69 | 6.41 |
+| Safety | **9.56** | 5.01 | 4.47 |
+
+GPT-5.5 dominates on all judge dimensions. The Accuracy gap is the headline: the 1B-scale fine-tunes frequently hallucinate plausible-sounding but factually wrong medical content that surface metrics cannot detect. Between the two locals, Qwen edges Llama-3.2 on every judge dimension.
+
+### Latency (RTX 4060 local, GPT-5.5 cloud)
+
+| Model | Mean latency |
+|---|---|
+| GPT-5.5 (cloud) | 7.22 s |
+| QLoRA Qwen (local) | 0.98 s |
+| QLoRA Llama-3.2 (local) | **0.63 s** |
+
+Both local models are 7-11x faster than the cloud path. Llama-3.2 is the fastest due to its smaller parameter count (1B vs 1.5B).
+
+**Honest framing**: surface metrics favour the fine-tunes; the LLM-as-judge Accuracy dimension (the load-bearing factuality measure) strongly favours GPT-5.5. The fine-tunes are fast and good at reproducing corpus writing style, but they hallucinate medical facts. See `notebooks/05_llm_generation_evaluation.ipynb` for the template-substitution analysis and `notebooks/07_model_comparison.ipynb` for the full 3-way synthesis.
 
 ---
 
@@ -222,7 +259,7 @@ Cleaning scripts live in the per-source folders under `knowledge_bases/`. The Q&
 
 - **Not for real clinical use.** This is a teaching / research artifact. Final outputs include a non-clinical disclaimer; please respect it.
 - **Catastrophic forgetting** on out-of-distribution prompts (the fine-tune narrows the base model's conversational range).
-- **Weakened in-context grounding** in the local model: training pairs have no context block, so the QLoRA model tends to answer from parametric memory even when correct evidence is supplied in the prompt. MASS-RAG retrieval still runs and is shown to the user; GPT-5.5 grounds in it better.
+- **Weakened in-context grounding** in both local models: training pairs have no context block, so the QLoRA fine-tunes tend to answer from parametric memory even when correct evidence is supplied in the prompt. MASS-RAG retrieval still runs and is shown to the user; GPT-5.5 grounds in it better.
 - **English only.** Datasets and prompts are English.
 - **PII railguard is regex-based** (with scispaCy NER backup), not a learned model. Adversarial inputs may slip through.
 - **Local-only deployment.** No cloud public URL is included; demo is via the assignment video.
@@ -231,9 +268,11 @@ Cleaning scripts live in the per-source folders under `knowledge_bases/`. The Q&
 
 ## Acknowledgements
 
-- Base model: [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) (Alibaba, Apache-2.0)
-- QLoRA: Dettmers et al., 2023 (https://arxiv.org/abs/2305.14314)
-- MASS-RAG: Xiao, Huang, Liu, Xie, 2026 (https://arxiv.org/abs/2604.18509)
+- Base models: [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) (Alibaba, Apache-2.0) and [Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct) (Meta, Llama 3.2 Community Licence)
+- QLoRA: [Dettmers et al., 2023](https://arxiv.org/abs/2305.14314)
+- MASS-RAG: [Xiao, Huang, Liu, Xie, 2026](https://arxiv.org/abs/2604.18509)
+- Clinical semantic search embeddings: [Excoffier et al., 2024](https://arxiv.org/abs/2401.01943)
+- Healthcare NER with language model pretraining: [Tarcar et al., 2019](https://arxiv.org/abs/1910.11241)
 - [Unsloth](https://github.com/unslothai/unsloth) for fast QLoRA training
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) + [Ollama](https://ollama.com) for local serving
 - [ChromaDB](https://www.trychroma.com/) for the vector store
@@ -247,4 +286,4 @@ Cleaning scripts live in the per-source folders under `knowledge_bases/`. The Q&
 
 MIT — see [LICENSE](LICENSE).
 
-The fine-tuned model on Hugging Face is licensed separately under CC-BY-NC-4.0 (see its model card for rationale).
+Both fine-tuned models on Hugging Face are licensed separately under CC-BY-NC-4.0 (see the model card for rationale). The Llama-3.2 base additionally carries Meta's Llama 3.2 Community Licence.

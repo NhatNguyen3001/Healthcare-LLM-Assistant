@@ -1,20 +1,23 @@
-"""OpenAI LLM wrappers via the Responses API, plus a router to the local QLoRA model.
+"""OpenAI LLM wrappers via the Responses API, plus a router to the local QLoRA models.
 
 Three roles, three models on the cloud side:
 - `generate()`        GPT-5.5 (`MODEL_GENERATION`) for Synthesis + final LLM generation
 - `generate_async()`  GPT-5.4-mini (`MODEL_AGENTS`) for the three parallel MASS-RAG filter agents
 - `judge()`           GPT-5.4 (`MODEL_JUDGE`) for eval notebooks (judge must differ from generator)
 
-`generate()` / `generate_stream()` take a `model_choice` flag.
-"cloud" keeps the legacy Responses-API path; "local" delegates to local_llm.py
-(Ollama-served QLoRA Qwen2.5-1.5B). MASS-RAG filter agents (`generate_async`),
+`generate()` / `generate_stream()` take a `model_choice` flag with three values:
+- "cloud"          legacy Responses-API path (GPT-5.5)
+- "local_qwen"     QLoRA Qwen2.5-1.5B via Ollama (`LOCAL_MODEL_QWEN`)
+- "local_llama32"  QLoRA Llama-3.2-1B via Ollama (`LOCAL_MODEL_LLAMA32`)
+
+Both local options hit the same Ollama daemon on a different tag; the daemon
+handles model lifecycle. MASS-RAG filter agents (`generate_async`),
 `rewrite_query`, and `judge` always stay cloud — they're never routed.
 
 Web search is a Responses API built-in tool. Enable it at the final
 LLM-generation step (the model decides whether to actually call it) and
 in the 0-hit retrieval fallback. Synthesis stays tool-free. `enable_web_search`
-is silently ignored when `model_choice="local"` since the local model has no
-web tool.
+is silently ignored on a local choice since local models have no web tool.
 """
 from typing import Iterator, Literal, Optional
 
@@ -22,13 +25,21 @@ from openai import AsyncOpenAI, OpenAI
 
 from src.pipeline import local_llm
 from src.utils.config import (
+    LOCAL_MODEL_LLAMA32,
+    LOCAL_MODEL_QWEN,
     MODEL_AGENTS,
     MODEL_GENERATION,
     MODEL_JUDGE,
     OPENAI_API_KEY,
 )
 
-ModelChoice = Literal["cloud", "local"]
+ModelChoice = Literal["cloud", "local_qwen", "local_llama32"]
+
+# Map each local UI choice to the Ollama tag served by the daemon.
+_LOCAL_TAGS: dict[str, str] = {
+    "local_qwen":    LOCAL_MODEL_QWEN,
+    "local_llama32": LOCAL_MODEL_LLAMA32,
+}
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 _aclient = AsyncOpenAI(api_key=OPENAI_API_KEY)
@@ -49,11 +60,12 @@ def generate(
     model: str = MODEL_GENERATION,
     model_choice: ModelChoice = "cloud",
 ) -> str:
-    """Sync chat completion. Routes to cloud Responses API (default) or local
-    Ollama-served QLoRA model when `model_choice="local"`. `enable_web_search`
-    and `model` are cloud-only and silently ignored on the local path."""
-    if model_choice == "local":
-        return local_llm.generate(prompt, system=system)
+    """Sync chat completion. Routes to cloud Responses API (default) or one of
+    two local Ollama-served QLoRA models when `model_choice` is "local_qwen"
+    or "local_llama32". `enable_web_search` and `model` are cloud-only and
+    silently ignored on either local path."""
+    if model_choice in _LOCAL_TAGS:
+        return local_llm.generate(prompt, system=system, model=_LOCAL_TAGS[model_choice])
     tools = [{"type": "web_search"}] if enable_web_search else None
     resp = _client.responses.create(
         model=model,
@@ -84,11 +96,14 @@ def generate_stream(
     model: str = MODEL_GENERATION,
     model_choice: ModelChoice = "cloud",
 ) -> Iterator[str]:
-    """Stream text deltas. Routes to cloud Responses API or local Ollama based
-    on `model_choice`. Yields plain text chunks suitable for `st.write_stream`.
-    `enable_web_search` and `model` are cloud-only."""
-    if model_choice == "local":
-        yield from local_llm.generate_stream(prompt, system=system)
+    """Stream text deltas. Routes to cloud Responses API or one of the two
+    local Ollama-served QLoRA models based on `model_choice`. Yields plain
+    text chunks suitable for `st.write_stream`. `enable_web_search` and
+    `model` are cloud-only."""
+    if model_choice in _LOCAL_TAGS:
+        yield from local_llm.generate_stream(
+            prompt, system=system, model=_LOCAL_TAGS[model_choice],
+        )
         return
     tools = [{"type": "web_search"}] if enable_web_search else None
     stream = _client.responses.create(

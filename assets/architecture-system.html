@@ -128,7 +128,7 @@
 
         <!-- Stage 7: Selector -->
         <rect x="340" y="710" width="320" height="40" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="500" y="734" fill="white" font-size="11" font-weight="600" text-anchor="middle">Sidebar Model Selector</text>
+        <text x="500" y="734" fill="white" font-size="11" font-weight="600" text-anchor="middle">Sidebar Model Selector · 3 options</text>
 
         <!-- Stage 8: Final LLMs -->
         <rect x="160" y="790" width="280" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
@@ -136,8 +136,9 @@
         <text x="300" y="832" fill="#94a3b8" font-size="9" text-anchor="middle">OpenAI Responses API · web_search tool</text>
 
         <rect x="560" y="790" width="280" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="700" y="814" fill="white" font-size="12" font-weight="600" text-anchor="middle">QLoRA Qwen2.5-1.5B (local)</text>
-        <text x="700" y="832" fill="#94a3b8" font-size="9" text-anchor="middle">Ollama @ 127.0.0.1:11434 · medqa-qwen</text>
+        <text x="700" y="810" fill="white" font-size="11" font-weight="600" text-anchor="middle">Two QLoRA fine-tunes (local)</text>
+        <text x="700" y="826" fill="#94a3b8" font-size="9" text-anchor="middle">Ollama @ 127.0.0.1:11434</text>
+        <text x="700" y="840" fill="#94a3b8" font-size="9" text-anchor="middle">tags: medqa-qwen · medqa-llama32</text>
 
         <!-- Arrows -->
         <!-- Stage 1 → Stage 2 -->
@@ -204,12 +205,12 @@
         </ul>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-dot emerald"></div><h3>Two-LLM design</h3></div>
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Three-way generator</h3></div>
         <ul>
           <li>• Filter agents always cloud (GPT-5.4-mini)</li>
-          <li>• Final generator: GPT-5.5 OR QLoRA Qwen</li>
+          <li>• Final generator: GPT-5.5 · QLoRA Qwen · QLoRA Llama-3.2</li>
           <li>• Sidebar switch is live, per-turn</li>
-          <li>• Both pass through MASS-RAG identically</li>
+          <li>• All three pass through MASS-RAG identically</li>
         </ul>
       </div>
       <div class="card">
