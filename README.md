@@ -6,7 +6,7 @@
   <p><i>A locally-deployable clinical Q&A system: voice in, privacy-filtered, multi-agent RAG, with two QLoRA-fine-tuned local LLMs (Qwen2.5-1.5B + Llama-3.2-1B) benchmarked head-to-head against GPT-5.5.</i></p>
 
   <p>
-    <a href="https://huggingface.co/Davis426/COMP8420-Healthcare-LLM-Assistant"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Model-Hugging%20Face-yellow" alt="HF Model"></a>
+    <a href="https://huggingface.co/Davis426/Healthcare-LLM-Assistant"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Model-Hugging%20Face-yellow" alt="HF Model"></a>
     <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12-blue" alt="Python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
     <img src="https://img.shields.io/badge/QLoRA-Qwen2.5--1.5B%20%2B%20Llama--3.2--1B-orange" alt="Base models">
@@ -83,9 +83,9 @@ The three run in parallel via `ThreadPoolExecutor(max_workers=3)`, so retrieval 
 # 2. Pull both fine-tunes (or one) from Hugging Face. The HF repo has them in
 #    sibling subfolders qwen/ and llama32/.
 pip install huggingface_hub
-huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
+huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "qwen/qwen-medqa-gguf/*" --local-dir ./models
-huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
+huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "llama32/llama32-medqa-gguf/*" --local-dir ./models
 
 # 3. Register both with Ollama (one daemon serves both tags concurrently).
@@ -101,8 +101,8 @@ ollama run medqa-llama32 "What are the side effects of amoxicillin?"
 
 ```bash
 # 1. Clone + create env.
-git clone https://github.com/NhatNguyen3001/COMP8420-Healthcare-LLM-Assistant.git
-cd COMP8420-Healthcare-LLM-Assistant
+git clone https://github.com/NhatNguyen3001/Healthcare-LLM-Assistant.git
+cd Healthcare-LLM-Assistant
 conda create -n healthcare_nlp python=3.11 -y && conda activate healthcare_nlp
 pip install -r requirements.txt
 

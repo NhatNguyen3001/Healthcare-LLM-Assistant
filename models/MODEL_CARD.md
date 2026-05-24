@@ -33,7 +33,7 @@ Two parallel QLoRA fine-tunes of small instruct models on the same 9,000-pair mi
 
 Both variants were trained with the same dataset, the same LoRA shape (r=16, α=32, all 7 projection layers) and the same SFT recipe, so any quality gap isolates the base-model effect.
 
-Built as part of the COMP8420 (Macquarie University) main project on a healthcare NLP assistant. Companion code: **https://github.com/NhatNguyen3001/COMP8420-Healthcare-LLM-Assistant**
+Built as part of the COMP8420 (Macquarie University) main project on a healthcare NLP assistant. Companion code: **https://github.com/NhatNguyen3001/Healthcare-LLM-Assistant**
 (see the GitHub README for the full system: voice input, PII railguard, multi-agent RAG, evaluation notebooks.)
 
 ## What is in this repo
@@ -158,7 +158,7 @@ Replace `<variant>` with `qwen` or `llama32` in the examples below.
 
 ```bash
 # Fetch one variant's GGUF + Modelfile
-huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
+huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "qwen/qwen-medqa-gguf/*" \
   --local-dir ./models
 
@@ -186,7 +186,7 @@ subfolder  = "qwen/qwen-medqa-adapter"
 # or:
 # base_id   = "meta-llama/Llama-3.2-1B-Instruct"
 # subfolder = "llama32/llama32-medqa-adapter"
-adapter_id = "Davis426/COMP8420-Healthcare-LLM-Assistant"
+adapter_id = "Davis426/Healthcare-LLM-Assistant"
 
 tokenizer = AutoTokenizer.from_pretrained(base_id)
 base = AutoModelForCausalLM.from_pretrained(base_id, device_map="auto")
@@ -201,7 +201,7 @@ print(tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True))
 ### Option 3: llama.cpp directly
 
 ```bash
-huggingface-cli download Davis426/COMP8420-Healthcare-LLM-Assistant \
+huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "qwen/qwen-medqa-gguf/model.Q4_K_M.gguf" --local-dir .
 
 ./llama-cli -m qwen/qwen-medqa-gguf/model.Q4_K_M.gguf \
@@ -231,7 +231,7 @@ If you use or build on this work, please reference:
   title  = {Healthcare NLP Assistant: parallel QLoRA fine-tunes of Qwen2.5-1.5B and Llama-3.2-1B for medical Q&A},
   author = {Davis426},
   year   = {2026},
-  howpublished = {\url{https://huggingface.co/Davis426/COMP8420-Healthcare-LLM-Assistant}}
+  howpublished = {\url{https://huggingface.co/Davis426/Healthcare-LLM-Assistant}}
 }
 ```
 

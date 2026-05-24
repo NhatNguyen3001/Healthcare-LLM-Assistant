@@ -28,7 +28,7 @@ from pathlib import Path
 
 from huggingface_hub import snapshot_download
 
-REPO_ID = "Davis426/COMP8420-Healthcare-LLM-Assistant"
+REPO_ID = "Davis426/Healthcare-LLM-Assistant"
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 # Each target maps to the HF subfolder prefix + the two top-level dirs inside it.

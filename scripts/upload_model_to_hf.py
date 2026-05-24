@@ -1,7 +1,7 @@
 """Upload one or both QLoRA models (adapter + Q4_K_M GGUF) to Hugging Face Hub.
 
 One HF repo holds both fine-tunes in sibling subfolders:
-  Davis426/COMP8420-Healthcare-LLM-Assistant
+  Davis426/Healthcare-LLM-Assistant
     ├── qwen/qwen-medqa-adapter/
     ├── qwen/qwen-medqa-gguf/
     ├── llama32/llama32-medqa-adapter/
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from huggingface_hub import HfApi
 
-REPO_ID = "Davis426/COMP8420-Healthcare-LLM-Assistant"
+REPO_ID = "Davis426/Healthcare-LLM-Assistant"
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 # Each target maps to (local-subfolder-name, repo-subfolder-name).
