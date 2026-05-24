@@ -101,9 +101,10 @@ MODEL_LABELS: dict[str, str] = {
 
 # ------------------------------------------------------------- Cached loaders
 
-@st.cache_resource(show_spinner="Warming up clinical NLP models (one-time, ~40s)")
+@st.cache_resource(show_spinner="Warming up clinical NLP models (one-time)")
 def load_pipeline():
     import sys
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     t_total = time.perf_counter()
 
     t0 = time.perf_counter()
@@ -118,30 +119,36 @@ def load_pipeline():
         sentiment,
         STO_extracting,
     )
-    print(f"[warmup] module imports (spaCy + scispaCy + sklearn + chromadb): {time.perf_counter() - t0:.2f}s", file=sys.stderr)
+    print(f"[warmup] module imports: {time.perf_counter() - t0:.2f}s", file=sys.stderr)
 
     pipe = {
         "rg": railguard, "pre": preprocessing, "ner": ner,
         "sent": sentiment, "clf": classifier, "sto": STO_extracting,
         "cdb": chromadb_store, "mr": massrag, "llm": llm,
     }
-    # Eagerly trigger lazy loads (sklearn .pkl + S-PubMedBert ~400MB via
-    # classifier.predict -> embeddings.encode) so the first user message
-    # doesn't pay the cost. Best-effort: if a .pkl is missing the user can
-    # still demo with a warning at first real use.
-    t0 = time.perf_counter()
-    try:
-        sentiment.predict("warmup")
-    except Exception as e:
-        print(f"[warmup] sentiment skipped: {e}", file=sys.stderr)
-    print(f"[warmup] sentiment .pkl: {time.perf_counter() - t0:.2f}s", file=sys.stderr)
 
-    t0 = time.perf_counter()
-    try:
-        classifier.predict("warmup")
-    except Exception as e:
-        print(f"[warmup] classifier skipped: {e}", file=sys.stderr)
-    print(f"[warmup] classifier .pkl + S-PubMedBert (~400MB): {time.perf_counter() - t0:.2f}s", file=sys.stderr)
+    # Parallel warmup: sentiment .pkl and classifier .pkl + S-PubMedBert
+    # are I/O-heavy (disk reads + weight deserialization) so threads overlap.
+    def _warm_sentiment():
+        t = time.perf_counter()
+        try:
+            sentiment.predict("warmup")
+        except Exception as e:
+            print(f"[warmup] sentiment skipped: {e}", file=sys.stderr)
+        return f"sentiment .pkl: {time.perf_counter() - t:.2f}s"
+
+    def _warm_classifier():
+        t = time.perf_counter()
+        try:
+            classifier.predict("warmup")
+        except Exception as e:
+            print(f"[warmup] classifier skipped: {e}", file=sys.stderr)
+        return f"classifier .pkl + S-PubMedBert: {time.perf_counter() - t:.2f}s"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futs = {pool.submit(fn): fn.__name__ for fn in [_warm_sentiment, _warm_classifier]}
+        for fut in as_completed(futs):
+            print(f"[warmup] {fut.result()}", file=sys.stderr)
 
     print(f"[warmup] TOTAL: {time.perf_counter() - t_total:.2f}s", file=sys.stderr)
     return pipe
