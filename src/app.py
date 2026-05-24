@@ -741,11 +741,19 @@ def run_pipeline(user_input: str, audio_bytes, audio_name, chat: dict) -> dict:
             tx = ", ".join((sto_res or {}).get("treatments", []))
             ox = ", ".join((sto_res or {}).get("outcomes", []))
             few_shot = (
-                "Example.\n"
+                "Example 1.\n"
                 "Patient: 55yo with chest pain and SOB.\n"
                 "Recommendation: Given chest pain and SOB, urgent cardiac "
                 "evaluation is indicated to rule out acute coronary syndrome. "
-                "Call emergency services. Do not delay.\n"
+                "Call emergency services. Do not delay.\n\n"
+                "Example 2.\n"
+                "Patient: 34yo with persistent headache, blurred vision, "
+                "and BP 180/110.\n"
+                "Recommendation: Blood pressure of 180/110 with headache "
+                "and visual changes suggests hypertensive urgency. Immediate "
+                "medical evaluation is needed to rule out end-organ damage. "
+                "Start oral antihypertensive if available and seek emergency "
+                "care promptly.\n"
             )
             prompt = (
                 f"{few_shot}\n"

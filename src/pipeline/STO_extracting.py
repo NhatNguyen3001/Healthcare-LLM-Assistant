@@ -56,7 +56,7 @@ _SYSTEM = (
 )
 
 _FEWSHOT = (
-    'Example.\n\n'
+    'Example 1.\n\n'
     'Input:\n'
     '"58-year-old presented with chest pain and shortness of breath. ECG '
     'showed ST elevation. Started on aspirin and beta-blocker, taken to cath '
@@ -65,7 +65,17 @@ _FEWSHOT = (
     'Output:\n'
     '{"symptoms": ["chest pain", "shortness of breath", "ST elevation on ECG"], '
     '"treatments": ["aspirin", "beta-blocker", "PCI"], '
-    '"outcomes": ["discharged on day 3", "symptoms resolved at 2-week follow-up"]}\n'
+    '"outcomes": ["discharged on day 3", "symptoms resolved at 2-week follow-up"]}\n\n'
+    'Example 2.\n\n'
+    'Input:\n'
+    '"42-year-old diabetic with worsening fatigue, polyuria, and HbA1c of 9.2%. '
+    'Current regimen metformin 1000 mg BID. Added semaglutide 0.25 mg weekly. '
+    'At 3-month follow-up HbA1c improved to 7.1%, fatigue resolved, weight '
+    'down 4 kg."\n\n'
+    'Output:\n'
+    '{"symptoms": ["fatigue", "polyuria", "HbA1c 9.2%"], '
+    '"treatments": ["metformin 1000 mg BID", "semaglutide 0.25 mg weekly"], '
+    '"outcomes": ["HbA1c improved to 7.1%", "fatigue resolved", "weight down 4 kg"]}\n'
 )
 
 _RE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)

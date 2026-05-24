@@ -21,50 +21,79 @@ import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results"
-ADAPTER_DIR = REPO_ROOT / "models" / "qwen-medqa-adapter"
+QWEN_ADAPTER_DIR = REPO_ROOT / "models" / "qwen-medqa-adapter"
+LLAMA_ADAPTER_DIR = REPO_ROOT / "models" / "llama32-medqa-adapter"
 TRAIN_JSONL = REPO_ROOT / "data" / "qlora_training" / "train.jsonl"
 
 WARM = "#c47a4d"
 COOL = "#3b6e8f"
+LLAMA_WARM = "#8b5e3c"
+LLAMA_COOL = "#2d5470"
 
 
-def find_trainer_state() -> Path | None:
+def find_trainer_state(adapter_dir: Path) -> Path | None:
     """Prefer the root trainer_state.json; fall back to the latest checkpoint."""
-    direct = ADAPTER_DIR / "trainer_state.json"
+    direct = adapter_dir / "trainer_state.json"
     if direct.exists():
         return direct
-    candidates = list(ADAPTER_DIR.glob("checkpoint-*/trainer_state.json"))
+    candidates = list(adapter_dir.glob("checkpoint-*/trainer_state.json"))
     if not candidates:
         return None
     return max(candidates, key=lambda p: int(p.parent.name.split("-")[1]))
 
 
-def plot_loss_curve() -> None:
-    state_path = find_trainer_state()
+def _load_history(adapter_dir: Path):
+    state_path = find_trainer_state(adapter_dir)
     if state_path is None:
-        print("[plot] loss curve skipped (no trainer_state.json yet)")
-        return
-
+        return None, None
     history = json.loads(state_path.read_text(encoding="utf-8")).get("log_history", [])
     train = [(e["step"], e["loss"]) for e in history if "loss" in e and "eval_loss" not in e]
     eval_ = [(e["step"], e["eval_loss"]) for e in history if "eval_loss" in e]
+    return train, eval_
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    if train:
-        xs, ys = zip(*train)
+
+def plot_loss_curve() -> None:
+    qwen_train, qwen_eval = _load_history(QWEN_ADAPTER_DIR)
+    llama_train, llama_eval = _load_history(LLAMA_ADAPTER_DIR)
+
+    if qwen_train is None and llama_train is None:
+        print("[plot] loss curve skipped (no trainer_state.json for either model)")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+    # Qwen subplot
+    ax = axes[0]
+    if qwen_train:
+        xs, ys = zip(*qwen_train)
         ax.plot(xs, ys, label="train loss", color=WARM, linewidth=1.8)
-    if eval_:
-        xs, ys = zip(*eval_)
+    if qwen_eval:
+        xs, ys = zip(*qwen_eval)
         ax.plot(xs, ys, label="eval loss", color=COOL, linewidth=2, marker="o", markersize=5)
     ax.set_xlabel("step")
     ax.set_ylabel("loss")
-    ax.set_title("QLoRA training — Qwen2.5-1.5B-Instruct")
+    ax.set_title("Qwen2.5-1.5B-Instruct")
     ax.grid(True, alpha=0.3)
     ax.legend()
+
+    # Llama subplot
+    ax = axes[1]
+    if llama_train:
+        xs, ys = zip(*llama_train)
+        ax.plot(xs, ys, label="train loss", color=LLAMA_WARM, linewidth=1.8)
+    if llama_eval:
+        xs, ys = zip(*llama_eval)
+        ax.plot(xs, ys, label="eval loss", color=LLAMA_COOL, linewidth=2, marker="o", markersize=5)
+    ax.set_xlabel("step")
+    ax.set_title("Llama-3.2-1B-Instruct")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    fig.suptitle("QLoRA training loss curves", fontsize=13, fontweight="bold")
     fig.tight_layout()
     fig.savefig(RESULTS_DIR / "qlora_loss_curve.png", dpi=150)
     plt.close(fig)
-    print("[plot] loss curve done")
+    print("[plot] loss curve done (both models)")
 
 
 def plot_source_mix() -> None:
