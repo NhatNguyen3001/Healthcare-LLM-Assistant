@@ -152,12 +152,15 @@ Detailed numbers and charts live in the parent repo:
 
 ## How to use
 
-Replace `<variant>` with `qwen` or `llama32` in the examples below.
+The examples below use the **Qwen** variant. For the **Llama-3.2** variant, swap every `qwen` for `llama32` in the paths and use the Ollama tag `medqa-llama32`.
 
 ### Option 1: Ollama (recommended for local serving)
 
 ```bash
+# Install Ollama (https://ollama.com/download) first. On Windows it auto-starts as a service.
+
 # Fetch one variant's GGUF + Modelfile
+pip install huggingface_hub
 huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "qwen/qwen-medqa-gguf/*" \
   --local-dir ./models
@@ -167,7 +170,7 @@ cd ./models/qwen/qwen-medqa-gguf
 ollama create medqa-qwen -f Modelfile
 
 # Try it
-ollama run medqa-qwen "What is amoxicillin used for?"
+ollama run medqa-qwen "What are the side effects of amoxicillin?"
 ```
 
 For the Llama variant, swap every `qwen` for `llama32` (paths) and the Ollama tag to `medqa-llama32`.
@@ -192,7 +195,7 @@ tokenizer = AutoTokenizer.from_pretrained(base_id)
 base = AutoModelForCausalLM.from_pretrained(base_id, device_map="auto")
 model = PeftModel.from_pretrained(base, adapter_id, subfolder=subfolder)
 
-messages = [{"role": "user", "content": "What is amoxicillin used for?"}]
+messages = [{"role": "user", "content": "What are the side effects of amoxicillin?"}]
 inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 out = model.generate(inputs, max_new_tokens=256)
 print(tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True))
@@ -201,11 +204,12 @@ print(tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True))
 ### Option 3: llama.cpp directly
 
 ```bash
+pip install huggingface_hub
 huggingface-cli download Davis426/Healthcare-LLM-Assistant \
   --include "qwen/qwen-medqa-gguf/model.Q4_K_M.gguf" --local-dir .
 
 ./llama-cli -m qwen/qwen-medqa-gguf/model.Q4_K_M.gguf \
-  -p "What is amoxicillin used for?" -n 256
+  -p "What are the side effects of amoxicillin?" -n 256
 ```
 
 ## Limitations
